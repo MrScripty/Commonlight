@@ -4,7 +4,10 @@
 
 A shared frame and restrained colour grade, with the actual person preserved.
 Built with Next.js, React, TypeScript and Sharp. No image model, inference account,
-telemetry, remote font, or uploaded real-person fixture is included.
+application analytics, remote font, or uploaded real-person fixture is included.
+Next.js itself enables anonymous CLI/build usage telemetry by default. To opt out
+for one run, set `NEXT_TELEMETRY_DISABLED=1` for that command; see the
+[official Next.js telemetry documentation](https://nextjs.org/telemetry).
 
 ## Run locally
 
