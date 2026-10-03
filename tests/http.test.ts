@@ -409,3 +409,47 @@ test("private listing restores review and sharing state without exposing another
     await remove(request(`/api/portraits/${id}`, "DELETE", first), context);
   }
 });
+
+test("normalized Next loopback URLs preserve exact browser Host/Origin equality", async () => {
+  for (const host of ["127.0.0.1:3100", "localhost:3100", "[::1]:3100"]) {
+    const response = await session(
+      new NextRequest("http://localhost:3100/api/session", {
+        method: "POST",
+        headers: { host, origin: `http://${host}` },
+      }),
+    );
+    assert.equal(response.status, 200);
+  }
+  for (const origin of [
+    "http://localhost:3100",
+    "http://127.0.0.1:3101",
+    "https://127.0.0.1:3100",
+    "null",
+  ]) {
+    const response = await session(
+      new NextRequest("http://localhost:3100/api/session", {
+        method: "POST",
+        headers: { host: "127.0.0.1:3100", origin },
+      }),
+    );
+    assert.equal(response.status, 403);
+  }
+  const external = await session(
+    new NextRequest("http://localhost:3100/api/session", {
+      method: "POST",
+      headers: {
+        host: "evil.example:3100",
+        origin: "http://evil.example:3100",
+        "x-forwarded-host": "localhost:3100",
+      },
+    }),
+  );
+  assert.equal(external.status, 503);
+  const port = await session(
+    new NextRequest("http://localhost:3100/api/session", {
+      method: "POST",
+      headers: { host: "127.0.0.1:3101", origin: "http://127.0.0.1:3101" },
+    }),
+  );
+  assert.equal(port.status, 403);
+});

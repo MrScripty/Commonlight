@@ -26,3 +26,11 @@ all three and added source/real-filesystem fault regressions. Lint, types and
 31 tests pass. See reports/persistence-review-repairs.md. Exact repaired build
 is deferred while the foreground mobile work owns resource priority; hosted
 browser execution remains pending. Ready for narrow independent re-review.
+
+2026-10-03 00:19 UTC: Published reviewed milestone575eed7 as draft PR2. Hosted
+run37081179610 passed the exact production build,31tests, audit and Chromium setup,
+then all browser scenarios exposed same-origin403 at session creation. The trace
+shows Origin/Host127.0.0.1:3100; NextURL source canonicalizes its URL to localhost.
+Corrected validation to preserve actual loopback Host/Origin equality while rejecting
+cross-host, scheme, port and forwarded-header substitutions. Added focused route
+regression; browser scenarios are unchanged and must pass the next hosted run.
