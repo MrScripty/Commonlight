@@ -8,14 +8,22 @@ export type Portrait = PortraitImages & {
   expiresAt: number;
   publicToken?: string;
 };
+type Awaitable<T> = T | Promise<T>;
+export type PortraitSummary = { id: string; expiresAt: string; token?: string };
+export interface SessionStore {
+  create(): Awaitable<string>;
+  require(token?: string): Awaitable<string>;
+  expiresAt(token: string): Awaitable<number>;
+}
 export interface PortraitStore {
-  count(): number;
-  put(portrait: Portrait): void;
-  owned(id: string, owner: string): Portrait;
-  published(token: string): Portrait;
-  publish(id: string, owner: string): string;
-  revoke(id: string, owner: string): void;
-  delete(id: string, owner: string): void;
+  list(owner: string): Awaitable<PortraitSummary[]>;
+  count(): Awaitable<number>;
+  put(portrait: Portrait, signal?: AbortSignal): Awaitable<void>;
+  owned(id: string, owner: string): Awaitable<Portrait>;
+  published(token: string): Awaitable<Portrait>;
+  publish(id: string, owner: string): Awaitable<string>;
+  revoke(id: string, owner: string): Awaitable<void>;
+  delete(id: string, owner: string): Awaitable<void>;
 }
 export class MemoryStore implements PortraitStore {
   private readonly records = new Map<string, Portrait>();
@@ -29,6 +37,16 @@ export class MemoryStore implements PortraitStore {
   private sweep() {
     for (const p of this.records.values())
       if (p.expiresAt <= this.now()) this.remove(p.id);
+  }
+  list(owner: string) {
+    this.sweep();
+    return [...this.records.values()]
+      .filter((p) => p.owner === owner)
+      .map((p) => ({
+        id: p.id,
+        expiresAt: new Date(p.expiresAt).toISOString(),
+        ...(p.publicToken ? { token: p.publicToken } : {}),
+      }));
   }
   count() {
     this.sweep();

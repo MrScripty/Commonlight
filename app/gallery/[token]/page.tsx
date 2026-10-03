@@ -8,7 +8,7 @@ export default async function Gallery({
 }) {
   const { token } = await params;
   try {
-    state.service.store.published(token);
+    await state.service.store.published(token);
   } catch {
     notFound();
   }

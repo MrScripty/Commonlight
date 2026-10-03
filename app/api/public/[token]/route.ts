@@ -8,7 +8,7 @@ export async function GET(
   try {
     localOnly(request);
     const { token } = await context.params;
-    return jpeg(state.service.store.published(token).processed);
+    return jpeg((await state.service.store.published(token)).processed);
   } catch (e) {
     return failure(e);
   }

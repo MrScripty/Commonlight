@@ -70,3 +70,19 @@ export function decodePublication(value: unknown): { token: string } {
     throw new Error("The server returned an invalid gallery link.");
   return { token: value.token };
 }
+
+export function decodePortraitList(
+  value: unknown,
+): Array<ReturnType<typeof decodeResult> & { token?: string }> {
+  if (!Array.isArray(value) || value.length > MAX_RECORDS)
+    throw new Error("The server returned an invalid private portrait list.");
+  const items = value.map((item) => ({
+    ...decodeResult(item),
+    ...("token" in item && item.token !== undefined
+      ? decodePublication(item)
+      : {}),
+  }));
+  if (new Set(items.map((item) => item.id)).size !== items.length)
+    throw new Error("The private portrait list has duplicate entries.");
+  return items;
+}

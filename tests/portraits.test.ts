@@ -95,8 +95,8 @@ test("only owner reads originals; explicit sharing grants processed-only token; 
     );
     assert.throws(() => store.owned(p.id, "other"), /unavailable/);
     assert.throws(() => store.published(p.id), /private/);
-    assert.throws(() => service.publish(p.id, "owner", false), /consent/);
-    const { token } = service.publish(p.id, "owner", true);
+    await assert.rejects(service.publish(p.id, "owner", false), /consent/);
+    const { token } = await service.publish(p.id, "owner", true);
     assert.notEqual(token, p.id);
     assert.notEqual(token, "owner");
     assert.deepEqual(
@@ -105,7 +105,7 @@ test("only owner reads originals; explicit sharing grants processed-only token; 
     );
     store.revoke(p.id, "owner");
     assert.throws(() => store.published(token));
-    assert.notEqual(service.publish(p.id, "owner", true).token, token);
+    assert.notEqual((await service.publish(p.id, "owner", true)).token, token);
     store.delete(p.id, "owner");
     assert.equal(store.count(), 0);
     assert.throws(() => store.owned(p.id, "owner"));
@@ -123,7 +123,7 @@ test("expired private and public images are unavailable and deleted", async () =
       options,
       authority("owner"),
     );
-    const { token } = service.publish(p.id, "owner", true);
+    const { token } = await service.publish(p.id, "owner", true);
     now += RETENTION_MS + 1;
     assert.throws(() => store.owned(p.id, "owner"));
     assert.throws(() => store.published(token));
@@ -240,13 +240,13 @@ test("staggered portraits expire no later than owner authority and remain revoca
       now = time;
       sessions.require(owner);
       for (const p of [early, late]) {
-        const { token } = service.publish(p.id, owner, true);
+        const { token } = await service.publish(p.id, owner, true);
         assert.ok(store.published(token));
         store.revoke(p.id, owner);
         assert.throws(() => store.published(token));
       }
     }
-    const { token } = service.publish(late.id, owner, true);
+    const { token } = await service.publish(late.id, owner, true);
     now = access.expiresAt;
     assert.throws(() => sessions.require(owner));
     assert.throws(() => store.published(token));

@@ -573,3 +573,20 @@ footer {
     scroll-behavior: auto;
   }
 }
+.saved-portraits {
+  margin: 20px 0 28px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.saved-portraits > span {
+  display: block;
+  font: 11px monospace;
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+  color: var(--accent);
+}
+.saved-portraits button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}

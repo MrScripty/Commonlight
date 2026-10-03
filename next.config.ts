@@ -1,6 +1,8 @@
+import { NEXT_DIST_DIR } from "./lib/storage-paths";
 import type { NextConfig } from "next";
 const config: NextConfig = {
   poweredByHeader: false,
+  distDir: NEXT_DIST_DIR,
   async headers() {
     return [
       {

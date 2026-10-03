@@ -21,9 +21,9 @@ export function mutation(request: Request) {
   if (request.headers.get("origin") !== new URL(request.url).origin)
     throw new AppError(403, "invalid", "Use the studio on the same origin.");
 }
-export function owner(request: NextRequest) {
+export async function owner(request: NextRequest) {
   localOnly(request);
-  return state.sessions.require(
+  return await state.sessions.require(
     request.cookies.get("commonlight_session")?.value,
   );
 }
