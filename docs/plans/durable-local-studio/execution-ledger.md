@@ -40,3 +40,13 @@ production build, clean audit and all three Chromium scenarios. Inspected the
 synthetic mobile screenshot; hosted evidence establishes the selected browser
 flows, not full accessibility/cross-browser coverage. See hosted-qualification.md.
 Final source/integration review remains explicit; no merge or deployment performed.
+
+2026-10-03 00:50 UTC: Repaired browser harness ownership after CodeRabbit review.
+The owned child now sends IPC readiness only after Next's production server binds
+an OS-assigned loopback port and completes initialization. Playwright gets that
+exact origin from its worker fixture; restart reuses the same port and fails
+closed on collision. No HTTP readiness probing or fixed shared port remains.
+An occupied-port regression verifies startup rejects with EADDRINUSE and the
+unrelated HTTP server receives zero requests. The staggered-expiry test awaits
+publication/revocation and async rejection. Types, lint and 33 tests pass locally;
+exact hosted build/browser qualification will follow this milestone push.

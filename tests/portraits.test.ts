@@ -241,15 +241,15 @@ test("staggered portraits expire no later than owner authority and remain revoca
       sessions.require(owner);
       for (const p of [early, late]) {
         const { token } = await service.publish(p.id, owner, true);
-        assert.ok(store.published(token));
-        store.revoke(p.id, owner);
-        assert.throws(() => store.published(token));
+        assert.ok(await store.published(token));
+        await store.revoke(p.id, owner);
+        await assert.rejects(async () => store.published(token));
       }
     }
     const { token } = await service.publish(late.id, owner, true);
     now = access.expiresAt;
     assert.throws(() => sessions.require(owner));
-    assert.throws(() => store.published(token));
+    await assert.rejects(async () => store.published(token));
     assert.throws(() => store.owned(late.id, owner));
     assert.equal(store.count(), 0);
   } finally {

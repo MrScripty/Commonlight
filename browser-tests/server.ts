@@ -7,20 +7,22 @@ export class TestServer {
   private exit?: Promise<void>;
   private directory?: string;
   private logs = "";
+  private ready = false;
+  constructor(private port = 0) {}
+  get url() {
+    if (!this.child || !this.ready) throw new Error("Test server is not ready");
+    return `http://127.0.0.1:${this.port}`;
+  }
   async start() {
+    if (this.child) throw new Error("Test server already started");
     this.directory ??= await mkdtemp(
       path.join(tmpdir(), "commonlight-browser-"),
     );
-    this.child = spawn(
+    this.logs = "";
+    this.ready = false;
+    const child = spawn(
       process.execPath,
-      [
-        "node_modules/next/dist/bin/next",
-        "start",
-        "--hostname",
-        "127.0.0.1",
-        "--port",
-        "3100",
-      ],
+      ["--import", "tsx", "browser-tests/server-child.ts", String(this.port)],
       {
         cwd: process.cwd(),
         env: {
@@ -28,39 +30,75 @@ export class TestServer {
           NEXT_TELEMETRY_DISABLED: "1",
           COMMONLIGHT_DATA_DIR: path.join(this.directory, "data"),
         },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
       },
     );
-    this.child.stdout?.on("data", (chunk) => {
+    this.child = child;
+    child.stdout?.on("data", (chunk) => {
       this.logs = (this.logs + String(chunk)).slice(-10000);
     });
-    this.child.stderr?.on("data", (chunk) => {
+    child.stderr?.on("data", (chunk) => {
       this.logs = (this.logs + String(chunk)).slice(-10000);
     });
-    this.exit = new Promise((resolve) => {
-      this.child!.once("exit", () => resolve());
-    });
-    const deadline = Date.now() + 20_000;
-    while (Date.now() < deadline) {
-      if (this.child.exitCode !== null)
-        throw new Error(`Test server exited: ${this.logs}`);
-      try {
-        if (
-          (
-            await fetch("http://127.0.0.1:3100", {
-              signal: AbortSignal.timeout(1000),
-            })
-          ).ok
-        )
-          return;
-      } catch {
-        /* Wait for this owned server to become ready. */
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    this.exit = new Promise((resolve) =>
+      child.once("close", () => {
+        this.ready = false;
+        resolve();
+      }),
+    );
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(
+          () =>
+            finish(new Error(`Test server did not become ready: ${this.logs}`)),
+          20_000,
+        );
+        const finish = (error?: Error) => {
+          clearTimeout(timer);
+          child.off("error", onError);
+          child.off("exit", onExit);
+          child.off("message", onMessage);
+          if (error) reject(error);
+          else resolve();
+        };
+        const onError = (error: Error) => finish(error);
+        const onExit = () =>
+          finish(new Error(`Test server exited: ${this.logs}`));
+        const onMessage = (message: unknown) => {
+          if (
+            typeof message !== "object" ||
+            message === null ||
+            !("port" in message) ||
+            !("ready" in message) ||
+            message.ready !== true
+          )
+            return;
+          const port = message.port;
+          if (
+            typeof port !== "number" ||
+            !Number.isInteger(port) ||
+            port < 1 ||
+            port > 65535 ||
+            (this.port !== 0 && port !== this.port)
+          ) {
+            finish(new Error("Invalid owned-server readiness"));
+            return;
+          }
+          this.port = port;
+          this.ready = true;
+          finish();
+        };
+        child.once("error", onError);
+        child.once("exit", onExit);
+        child.on("message", onMessage);
+      });
+    } catch (error) {
+      await this.stop();
+      throw error;
     }
-    throw new Error(`Test server did not become ready: ${this.logs}`);
   }
   async stop() {
+    this.ready = false;
     if (!this.child || !this.exit) return;
     this.child.kill("SIGTERM");
     const timer = setTimeout(() => this.child?.kill("SIGKILL"), 10_000);

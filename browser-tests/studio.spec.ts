@@ -1,8 +1,25 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test as baseTest, expect, type Page } from "@playwright/test";
 import sharp from "sharp";
 import { TestServer } from "./server";
-const server = new TestServer();
-const base = "http://127.0.0.1:3100";
+const test = baseTest.extend<object, { studio: TestServer }>({
+  studio: [
+    // Playwright requires destructuring fixture dependencies, even when empty.
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, provide) => {
+      const server = new TestServer();
+      try {
+        await server.start();
+        await provide(server);
+      } finally {
+        await server.dispose();
+      }
+    },
+    { scope: "worker" },
+  ],
+  baseURL: async ({ studio }, provide) => {
+    await provide(studio.url);
+  },
+});
 let synthetic: Buffer;
 declare global {
   interface Window {
@@ -16,10 +33,6 @@ test.beforeAll(async () => {
   })
     .png()
     .toBuffer();
-  await server.start();
-});
-test.afterAll(async () => {
-  await server.dispose();
 });
 async function ready(page: Page) {
   await page.goto("/");
@@ -37,7 +50,7 @@ async function prepare(page: Page) {
     page.getByRole("heading", { name: "Meet your portrait." }),
   ).toBeVisible();
 }
-async function cleanup(page: Page) {
+async function cleanup(page: Page, base: string) {
   const r = await page.request.get("/api/portraits");
   if (r.ok())
     for (const p of await r.json())
@@ -45,14 +58,16 @@ async function cleanup(page: Page) {
         headers: { origin: base },
       });
 }
-test.afterEach(async ({ page }) => {
-  await cleanup(page);
+test.afterEach(async ({ page, studio }) => {
+  await cleanup(page, studio.url);
 });
 
 test("consent, exact original, reload/restart recovery, public consent and revocation", async ({
   page,
   browser,
+  studio,
 }) => {
+  const base = studio.url;
   await ready(page);
   await expect(page.getByRole("button", { name: "Use camera" })).toBeDisabled();
   await expect(
@@ -96,7 +111,7 @@ test("consent, exact original, reload/restart recovery, public consent and revoc
   await expect(page.getByLabel("Gallery link", { exact: true })).toHaveValue(
     gallery,
   );
-  await server.restart();
+  await studio.restart();
   await page.reload();
   await expect(page.getByLabel("Gallery link", { exact: true })).toHaveValue(
     gallery,
