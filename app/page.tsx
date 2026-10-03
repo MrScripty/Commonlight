@@ -6,6 +6,7 @@ import {
   MAX_UPLOAD_BYTES,
   decodePublication,
   decodeResult,
+  decodePortraitList,
 } from "@/lib/contracts";
 type Result = ReturnType<typeof decodeResult>;
 async function checked(response: Response) {
@@ -35,6 +36,8 @@ export default function Studio() {
     [notice, setNotice] = useState("");
   const [result, setResult] = useState<Result | null>(null),
     [link, setLink] = useState("");
+  const [saved, setSaved] = useState<ReturnType<typeof decodePortraitList>>([]);
+  const [recovering, setRecovering] = useState(true);
   const video = useRef<HTMLVideoElement>(null),
     controller = useRef(new CameraController());
   const request = useRef<AbortController | null>(null),
@@ -74,8 +77,103 @@ export default function Studio() {
     };
   }, []);
   useEffect(() => {
+    let pending: AbortController | undefined;
+    async function recover() {
+      pending?.abort();
+      const abort = new AbortController();
+      pending = abort;
+      const current = ++generation.current;
+      try {
+        const response = await fetch("/api/portraits", {
+          signal: abort.signal,
+        });
+        if (response.status === 401) {
+          if (
+            !abort.signal.aborted &&
+            mounted.current &&
+            current === generation.current
+          ) {
+            setSaved([]);
+            setResult(null);
+            setLink("");
+          }
+          return;
+        }
+        const portraits = decodePortraitList(await checked(response));
+        if (
+          !abort.signal.aborted &&
+          mounted.current &&
+          current === generation.current
+        ) {
+          setSaved(portraits);
+          const portrait = portraits[0];
+          if (!portrait) {
+            setResult(null);
+            setLink("");
+          }
+          if (portrait) {
+            setResult(portrait);
+            setLink(
+              portrait.token
+                ? `${location.origin}/gallery/${portrait.token}`
+                : "",
+            );
+            setNotice(
+              `Restored ${portraits.length} saved portrait${portraits.length === 1 ? "" : "s"} in this private session.`,
+            );
+          }
+        }
+      } catch (error) {
+        if (
+          !abort.signal.aborted &&
+          mounted.current &&
+          current === generation.current
+        )
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Could not restore private portraits.",
+          );
+      } finally {
+        if (
+          !abort.signal.aborted &&
+          mounted.current &&
+          current === generation.current
+        )
+          setRecovering(false);
+      }
+    }
+    void recover();
+    const onHide = () => pending?.abort();
+    const onShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        setRecovering(true);
+        void recover();
+      }
+    };
+    window.addEventListener("pagehide", onHide);
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      pending?.abort();
+      window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("pageshow", onShow);
+    };
+  }, []);
+  useEffect(() => {
     if (result) heading.current?.focus();
   }, [result]);
+  function selectSaved(
+    portrait: ReturnType<typeof decodePortraitList>[number],
+  ) {
+    if (busy || recovering) return;
+    stopCamera();
+    setResult(portrait);
+    setLink(
+      portrait.token ? `${location.origin}/gallery/${portrait.token}` : "",
+    );
+    setShareConsent(false);
+    setError("");
+  }
   function choose(selected: File | null) {
     setError("");
     if (!selected) return;
@@ -160,7 +258,7 @@ export default function Studio() {
     );
   }
   async function run(action: (signal: AbortSignal) => Promise<void>) {
-    if (lock.current) return;
+    if (lock.current || recovering) return;
     lock.current = true;
     setBusy(true);
     setError("");
@@ -207,6 +305,7 @@ export default function Studio() {
       );
       if (!signal.aborted && mounted.current) {
         setResult(data);
+        setSaved((current) => [...current, data]);
         setLink("");
         setShareConsent(false);
         setNotice(
@@ -241,6 +340,11 @@ export default function Studio() {
       );
       if (!signal.aborted && mounted.current) {
         setLink(`${location.origin}/gallery/${data.token}`);
+        setSaved((current) =>
+          current.map((item) =>
+            item.id === result.id ? { ...item, token: data.token } : item,
+          ),
+        );
         setNotice(
           "Link sharing is on. Anyone with the link can view and save this portrait.",
         );
@@ -261,6 +365,13 @@ export default function Studio() {
       if (!signal.aborted && mounted.current) {
         setLink("");
         setShareConsent(false);
+        setSaved((current) =>
+          current.map((item) =>
+            item.id === result.id
+              ? { id: item.id, expiresAt: item.expiresAt }
+              : item,
+          ),
+        );
         setNotice(
           "Link revoked. Previously downloaded copies cannot be recalled.",
         );
@@ -277,6 +388,7 @@ export default function Studio() {
         }),
       );
       if (!signal.aborted && mounted.current) {
+        setSaved((current) => current.filter((item) => item.id !== result.id));
         setResult(null);
         setLink("");
         setShareConsent(false);
@@ -351,8 +463,44 @@ export default function Studio() {
             </div>
           )}
           <p className="status" role="status" aria-live="polite">
-            {busy ? "Working on your request…" : notice}
+            {recovering
+              ? "Restoring your private studio…"
+              : busy
+                ? "Working on your request…"
+                : notice}
           </p>
+          {saved.length > 0 && (
+            <nav className="saved-portraits" aria-label="Your saved portraits">
+              <span>YOUR PRIVATE SESSION</span>
+              <div className="button-row">
+                {saved.map((portrait, index) => (
+                  <button
+                    key={portrait.id}
+                    className="secondary"
+                    disabled={busy || recovering}
+                    aria-pressed={result?.id === portrait.id}
+                    onClick={() => selectSaved(portrait)}
+                  >
+                    Portrait {index + 1}
+                    {portrait.token ? " · shared" : " · private"}
+                  </button>
+                ))}
+                <button
+                  className="secondary"
+                  disabled={busy || recovering}
+                  onClick={() => {
+                    stopCamera();
+                    setResult(null);
+                    setLink("");
+                    setShareConsent(false);
+                    setError("");
+                  }}
+                >
+                  Add another portrait
+                </button>
+              </div>
+            </nav>
+          )}
           {!result ? (
             <div className="workspace">
               <div className="photo-panel">
@@ -395,7 +543,7 @@ export default function Studio() {
                   <input
                     type="checkbox"
                     checked={consent}
-                    disabled={busy}
+                    disabled={busy || recovering}
                     onChange={(e) => {
                       setConsent(e.target.checked);
                       if (!e.target.checked) stopCamera();
@@ -413,14 +561,14 @@ export default function Studio() {
                 </p>
                 <div className="button-row">
                   <label
-                    className={`button secondary ${busy ? "disabled" : ""}`}
+                    className={`button secondary ${busy || recovering ? "disabled" : ""}`}
                   >
                     Upload photo
                     <input
                       aria-label="Upload photo"
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
-                      disabled={busy}
+                      disabled={busy || recovering}
                       onChange={(e) => {
                         choose(e.target.files?.[0] ?? null);
                         e.target.value = "";
@@ -429,7 +577,9 @@ export default function Studio() {
                   </label>
                   <button
                     className="secondary"
-                    disabled={!consent || busy || cameraPending || camera}
+                    disabled={
+                      !consent || busy || recovering || cameraPending || camera
+                    }
                     onClick={openCamera}
                   >
                     {cameraPending ? "Waiting for camera…" : "Use camera"}
@@ -451,7 +601,7 @@ export default function Studio() {
                     type="text"
                     maxLength={60}
                     value={name}
-                    disabled={busy}
+                    disabled={busy || recovering}
                     placeholder="Your name"
                     onChange={(e) => setName(e.target.value)}
                   />
@@ -460,14 +610,14 @@ export default function Studio() {
                   <input
                     type="checkbox"
                     checked={mark}
-                    disabled={busy}
+                    disabled={busy || recovering}
                     onChange={(e) => setMark(e.target.checked)}
                   />
                   <span>Add a BC + AI text mark</span>
                 </label>
                 <button
                   className="primary wide"
-                  disabled={!file || !consent || busy}
+                  disabled={!file || !consent || busy || recovering}
                   onClick={prepare}
                 >
                   Prepare my portrait <span aria-hidden="true">↗</span>
@@ -517,7 +667,11 @@ export default function Studio() {
                 >
                   Save exact original
                 </a>
-                <button className="danger" onClick={remove} disabled={busy}>
+                <button
+                  className="danger"
+                  onClick={remove}
+                  disabled={busy || recovering}
+                >
                   Delete both & start again
                 </button>
               </div>
@@ -530,9 +684,9 @@ export default function Studio() {
                     private.
                   </p>
                   <p className="small">
-                    Expires {new Date(result.expiresAt).toLocaleString()}.
-                    Server restart also removes it. Anyone holding a shared link
-                    can save a copy.
+                    Expires {new Date(result.expiresAt).toLocaleString()}. This
+                    deadline remains the same after a restart. Anyone holding a
+                    shared link can save a copy.
                   </p>
                 </div>
                 <div>
@@ -542,7 +696,7 @@ export default function Studio() {
                         <input
                           type="checkbox"
                           checked={shareConsent}
-                          disabled={busy}
+                          disabled={busy || recovering}
                           onChange={(e) => setShareConsent(e.target.checked)}
                         />
                         <span>
@@ -551,7 +705,7 @@ export default function Studio() {
                         </span>
                       </label>
                       <button
-                        disabled={!shareConsent || busy}
+                        disabled={!shareConsent || busy || recovering}
                         onClick={publish}
                       >
                         Create gallery link ↗
@@ -578,7 +732,7 @@ export default function Studio() {
                         </a>
                         <button
                           className="secondary"
-                          disabled={busy}
+                          disabled={busy || recovering}
                           onClick={revoke}
                         >
                           Revoke link
@@ -605,14 +759,16 @@ export default function Studio() {
               difficult lighting or decide what looks like you.
             </p>
             <p>
-              Exact uploaded originals (including their metadata) are retained
-              privately with a metadata-stripped preview and prepared image
-              until the private session expires, at most 24 hours. A restart
-              clears everything. Keep downloaded copies you want to retain.
-              Reloading this page loses the current review controls.
+              Exact uploaded originals (including their metadata), a clean
+              preview, and the prepared image are saved in private local storage
+              until the session expires, at most 24 hours. Reloading or
+              restarting the server restores your controls while the same
+              browser session cookie remains. Expired files are removed while
+              the server runs or at its next storage access. Keep downloads for
+              anything you want to retain longer.
             </p>
             <p>
-              Hosted processing and permanent storage are future integrations,
+              Hosted processing, permanent hosting and encrypted backups are
               currently unavailable. This studio is local-only; gallery links
               work only while this server is running and reachable on your own
               device.

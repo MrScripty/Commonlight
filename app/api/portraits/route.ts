@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
   try {
     mutation(request);
-    const identity = owner(request);
+    const identity = await owner(request);
     let options: unknown;
     try {
       options = JSON.parse(
@@ -19,12 +19,24 @@ export async function POST(request: NextRequest) {
       await state.service.create(
         () => boundedBody(request),
         decodeOptions(options),
-        { token: identity, expiresAt: state.sessions.expiresAt(identity) },
+        {
+          token: identity,
+          expiresAt: await state.sessions.expiresAt(identity),
+        },
         request.signal,
       ),
       201,
     );
   } catch (e) {
     return failure(e);
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const identity = await owner(request);
+    return json(await state.service.store.list(identity));
+  } catch (error) {
+    return failure(error);
   }
 }

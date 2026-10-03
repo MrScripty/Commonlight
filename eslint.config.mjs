@@ -4,7 +4,12 @@ import ts from "typescript-eslint";
 import hooks from "eslint-plugin-react-hooks";
 import next from "@next/eslint-plugin-next";
 export default defineConfig([
-  globalIgnores([".next/**", "next-env.d.ts"]),
+  globalIgnores([
+    ".next/**",
+    "next-env.d.ts",
+    "playwright-report/**",
+    "test-results/**",
+  ]),
   {
     files: ["**/*.ts", "**/*.tsx"],
     extends: [js.configs.recommended, ...ts.configs.recommended],

@@ -7,23 +7,41 @@ export const privateHeaders = {
   "Referrer-Policy": "no-referrer",
   "X-Robots-Tag": "noindex, nofollow, noarchive",
 };
-export function localOnly(request: Request) {
-  const host = new URL(request.url).hostname;
-  if (!["localhost", "127.0.0.1", "[::1]"].includes(host))
+function transportOrigin(request: Request) {
+  const url = new URL(request.url);
+  const host = request.headers.get("host") ?? url.host;
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
+    !/^(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]{1,5})?$/i.test(host)
+  ) {
     throw new AppError(
       503,
       "unavailable",
       "This prototype is local-only. Production hosting is not enabled.",
     );
+  }
+  const transport = new URL(`${url.protocol}//${host}`);
+  if (transport.port !== url.port)
+    throw new AppError(
+      403,
+      "invalid",
+      "The request authority does not match this local server.",
+    );
+  return transport.origin;
+}
+export function localOnly(request: Request) {
+  transportOrigin(request);
 }
 export function mutation(request: Request) {
-  localOnly(request);
-  if (request.headers.get("origin") !== new URL(request.url).origin)
+  // NextURL canonicalizes loopback IPs to localhost; the actual Host preserves
+  // the browser's origin. Never substitute forwarded headers or alias origins.
+  if (request.headers.get("origin") !== transportOrigin(request))
     throw new AppError(403, "invalid", "Use the studio on the same origin.");
 }
-export function owner(request: NextRequest) {
+export async function owner(request: NextRequest) {
   localOnly(request);
-  return state.sessions.require(
+  return await state.sessions.require(
     request.cookies.get("commonlight_session")?.value,
   );
 }

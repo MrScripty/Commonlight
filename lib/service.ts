@@ -1,3 +1,4 @@
+import { LocalStore } from "./local-store";
 import { randomBytes } from "node:crypto";
 import {
   AppError,
@@ -10,8 +11,8 @@ import {
 import { DeterministicProcessor, type PortraitProcessor } from "./processor";
 import {
   MemoryStore,
-  Sessions,
   type PortraitStore,
+  type SessionStore,
   type OwnerAuthority,
 } from "./store";
 export class PortraitService {
@@ -29,10 +30,7 @@ export class PortraitService {
   ) {
     const options = decodeOptions(rawOptions);
     checkCancelled(signal);
-    if (
-      this.active >= MAX_ACTIVE ||
-      this.store.count() + this.active >= MAX_RECORDS
-    )
+    if (this.active >= MAX_ACTIVE)
       throw new AppError(
         503,
         "unavailable",
@@ -46,6 +44,8 @@ export class PortraitService {
       );
     this.active++;
     try {
+      if ((await this.store.count()) + this.active > MAX_RECORDS)
+        throw new AppError(503, "unavailable", "The local studio is full.");
       const bytes = typeof input === "function" ? await input() : input;
       checkCancelled(signal);
       const images = await this.processor.process(bytes, options, signal);
@@ -58,28 +58,33 @@ export class PortraitService {
           "unavailable",
           "Your private session expired during processing.",
         );
-      this.store.put({ id, owner: owner.token, ...images, expiresAt });
+      await this.store.put(
+        { id, owner: owner.token, ...images, expiresAt },
+        signal,
+      );
       return { id, expiresAt: new Date(expiresAt).toISOString() };
     } finally {
       this.active--;
     }
   }
-  publish(id: string, owner: string, consent: unknown) {
+  async publish(id: string, owner: string, consent: unknown) {
     if (consent !== true)
       throw new AppError(
         400,
         "invalid",
         "The subject must explicitly consent to sharing this portrait by link.",
       );
-    return { token: this.store.publish(id, owner) };
+    return { token: await this.store.publish(id, owner) };
   }
 }
 // Process-global lifetime survives route module loading in the local Next server.
-// This adapter is deliberately unsuitable for multiple workers or durable hosting.
+// Admission remains single-server; storage mutations are separately filesystem-locked.
 const globalState = globalThis as typeof globalThis & {
-  commonlight?: { service: PortraitService; sessions: Sessions };
+  commonlight?: { service: PortraitService; sessions: SessionStore };
 };
-export const state = (globalState.commonlight ??= {
-  service: new PortraitService(),
-  sessions: new Sessions(),
-});
+function localState() {
+  const store = new LocalStore(process.env.COMMONLIGHT_DATA_DIR);
+  store.startMaintenance();
+  return { service: new PortraitService(store), sessions: store };
+}
+export const state = (globalState.commonlight ??= localState());

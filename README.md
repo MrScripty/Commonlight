@@ -51,14 +51,25 @@ The hero is an abstract CSS silhouette, not an example processing result.
 
 ## Privacy and deliberate prototype limits
 
-Images are kept only in process-private memory, never in public/static paths or
-on disk. The single-process store holds at most 12 portraits, with at most two
-upload/processing operations at once. Admission happens before any request-body
-read, and invalid options are rejected before admission. Every portrait expires
-no later than the owning session (24 hours from session creation), so late-session
-uploads have a shorter remaining lifetime. Expiry blocks access; owned timers remove
-records and links when due. Server restart clears everything. Timers are subject
-to runtime scheduling; read-time expiration is immediate.
+Images are retained in a private local filesystem directory, `.local-data` by
+default (or an operator-selected `COMMONLIGHT_DATA_DIR` outside all served/build paths). The
+root is owner-only and files are 0600; do not put this directory in a static file
+server, shared drive or source control. Storage is not encrypted by this app. Filesystem behavior is qualified on the
+Linux runner; macOS and Windows persistence are not yet qualified.
+Only a single local server is supported, with at most 12 portraits and two
+upload/processing operations. Admission precedes request-body reads.
+
+Every portrait expires no later than its owning session (24 hours from session
+creation), so late-session uploads have shorter lifetimes. Reads fail after expiry.
+Running-server maintenance removes expired files approximately once per minute,
+and each storage operation cleans expired records. If the server is stopped,
+expired bytes remain private on disk until its next storage access. Deletion is
+ordinary filesystem deletion, not a claim of secure erase from backups or SSDs.
+
+Original and derived bytes survive a restart. Complete staged records are
+atomically renamed into place; sharing/revocation metadata uses atomic file
+replacement under a filesystem lock. Unknown versions, malformed state and unsafe
+paths fail closed without an in-memory fallback or destructive rebuild.
 
 Private access requires an expiring server-issued HttpOnly/SameSite=Strict session
 cookie. Public links use distinct random capabilities and cannot access originals
@@ -67,27 +78,29 @@ Sharing is an explicit second action; unguessability is not a substitute for
 subject consent. Revocation cannot erase copies viewers have already downloaded.
 Gallery links are local and useful only on the same reachable local server.
 
-Reloading loses review controls. Download anything to keep before leaving. A
-cancelled/disconnected upload that finished just before cancellation may remain
-private until expiry. Aborted processing that observes cancellation before commit
-cannot store or publish its result. No processing ever publishes automatically.
+Reloading restores saved portraits and their review/revoke/delete controls through
+an authenticated private listing. Retain the same browser cookie: clearing it or
+letting it expire loses owner access. Downloads are needed for longer retention.
+A cancelled/disconnected upload that finished before cancellation may still exist
+privately; reload recovers it. Cancellation observed before storage publication
+removes staged files. No processing publishes a public link automatically.
 
 ## Architecture and future integrations
 
 - `lib/contracts.ts`: size, consent, options, client response decoders.
 - `lib/processor.ts`: `PortraitProcessor` and deterministic Sharp implementation.
-- `lib/store.ts`: `PortraitStore`, bounded ephemeral memory adapter, short sessions.
+- `lib/store.ts`: storage/session contracts and in-memory unit-test adapter.
+- `lib/local-store.ts`: versioned private files, atomic updates, expiry and locks.
 - `lib/service.ts`: processing admission, cancellation fence, creation/publication.
 - `lib/http.ts` and `app/api`: loopback/origin enforcement, auth and bounded bodies.
 - `lib/camera.ts`: camera permission/stream ownership and cleanup.
 - `app/page.tsx`: capture, review and separate publication user experience.
 
 A hosted processor can implement `PortraitProcessor`; a private object store plus
-transactional metadata store can implement `PortraitStore`. Neither is configured.
+transactional metadata store can implement `PortraitStore`. Remote adapters are not configured.
 Before deployment: supply authorized identity/storage, review provider consent and
 retention, add durable cancellation/job reconciliation, rate limits and deployment
-resource boundaries, and run real-browser acceptance. Never expose the memory
-adapter through multiple workers/serverless instances or remove loopback guards
+resource boundaries, and run real-browser acceptance. Do not run this local prototype through multiple workers/serverless instances or remove loopback guards
 without revisiting the threat model.
 
 ## Verify
@@ -99,9 +112,13 @@ npm run check
 Unit and route integration tests cover dimensions/encoding, metadata, deterministic
 output, input/consent rejection, ownership, expiry, sharing/revocation/deletion,
 concurrency reservations, cancellation and delayed camera permission cleanup.
-Real-browser camera/focus/navigation/mobile visual testing is separately required;
-this environment prohibited localhost browser access, so it is **not claimed**.
-See `docs/plans/portrait-baseline/` for current acceptance and limitations.
+`npm run test:browser` adds hosted Chromium checks for synthetic upload, reload,
+actual server restart, owner recovery, explicit sharing/revocation, repeated and
+interrupted requests, fake-camera cleanup/capture, keyboard use and mobile bounds.
+CI installs Chromium and uploads synthetic traces/screenshots; no real photos are
+used. Local browser access is prohibited in the development environment, so
+browser execution evidence must come from the hosted run before acceptance.
+See `docs/plans/durable-local-studio/` for current acceptance and limitations.
 
 ## Visual reference
 
@@ -117,3 +134,12 @@ execution (Apache-2.0/MIT), Sharp raster decoding/encoding (Apache-2.0; its bund
 native dependencies carry their own notices), ESLint/TypeScript/React Hooks/Next plugins own static checks; Prettier formatting.
 Versions and integrity are locked in package-lock.json. Maintain with tests/build
 and dependency audit; a clean audit is not a security guarantee.
+
+`proper-lockfile` (MIT) owns cross-process local mutation exclusion. Playwright
+(Apache-2.0) owns hosted browser tests; its browser binaries are installed only in
+the hosted runner. The browser harness sets a command-scoped telemetry opt-out.
+
+The supported Next `distDir` is defined once in `lib/storage-paths.ts` and used by
+Next configuration and privacy containment. Both configured paths and resolved
+symlink paths are checked against public/static/build output roots. Do not bypass
+that shared configuration or serve the private directory through another server.

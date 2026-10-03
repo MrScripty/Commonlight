@@ -1,4 +1,30 @@
-import test from "node:test";
+import test, { before, after } from "node:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { LocalStore } from "../lib/local-store";
+import { state, PortraitService } from "../lib/service";
+let testRoot: string;
+let localStore: LocalStore;
+before(async () => {
+  if (state.sessions instanceof LocalStore) await state.sessions.dispose();
+  testRoot = await mkdtemp(path.join(tmpdir(), "commonlight-routes-"));
+  localStore = new LocalStore(path.join(testRoot, "data"));
+  state.service = new PortraitService(localStore);
+  state.sessions = localStore;
+});
+after(async () => {
+  await localStore.dispose();
+  await rm(testRoot, { recursive: true, force: true });
+});
+async function until(check: () => boolean) {
+  const end = Date.now() + 5000;
+  while (!check()) {
+    if (Date.now() > end)
+      throw new Error("Expected stream state did not arrive");
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import sharp from "sharp";
@@ -271,6 +297,7 @@ test("upload admission precedes body reading; only two incomplete streams are co
     );
   }
   const pending = [upload(0), upload(1)];
+  await until(() => pulls[0] === 1 && pulls[1] === 1);
   try {
     const rejected = await Promise.all([
       upload(2),
@@ -293,7 +320,7 @@ test("upload admission precedes body reading; only two incomplete streams are co
     assert.equal((await upload(2, false)).status, 400);
     assert.equal(pulls[2], 0);
     const resumed = upload(3);
-    await Promise.resolve();
+    await until(() => pulls[3] === 1);
     assert.equal(pulls[3], 1);
     aborts[3].abort();
     assert.equal((await resumed).status, 409);
@@ -327,4 +354,102 @@ test("upload admission precedes body reading; only two incomplete streams are co
     aborts.forEach((a) => a.abort());
     await Promise.all(pending);
   }
+});
+
+test("private listing restores review and sharing state without exposing another owner", async () => {
+  const first = (await session(request("/api/session", "POST"))).headers
+    .get("set-cookie")!
+    .split(";")[0];
+  const second = (await session(request("/api/session", "POST"))).headers
+    .get("set-cookie")!
+    .split(";")[0];
+  const input = await sharp({
+    create: { width: 120, height: 150, channels: 3, background: "#774488" },
+  })
+    .png()
+    .toBuffer();
+  const result = await create(
+    request("/api/portraits", "POST", first, new Uint8Array(input), {
+      "x-portrait-options": encodeURIComponent(
+        JSON.stringify({ consent: true, name: "", mark: false }),
+      ),
+    }),
+  );
+  const { id } = await result.json(),
+    context = { params: Promise.resolve({ id }) };
+  try {
+    const { GET: list } = await import("../app/api/portraits/route");
+    assert.equal((await list(request("/api/portraits"))).status, 401);
+    assert.deepEqual(
+      await (await list(request("/api/portraits", "GET", second))).json(),
+      [],
+    );
+    const own = await (
+      await list(request("/api/portraits", "GET", first))
+    ).json();
+    assert.equal(own.length, 1);
+    assert.equal(own[0].id, id);
+    assert.equal(own[0].token, undefined);
+    const shared = await action(
+      request(
+        `/api/portraits/${id}`,
+        "POST",
+        first,
+        JSON.stringify({ action: "publish", consent: true }),
+      ),
+      context,
+    );
+    const { token } = await shared.json();
+    assert.equal(
+      (await (await list(request("/api/portraits", "GET", first))).json())[0]
+        .token,
+      token,
+    );
+  } finally {
+    await remove(request(`/api/portraits/${id}`, "DELETE", first), context);
+  }
+});
+
+test("normalized Next loopback URLs preserve exact browser Host/Origin equality", async () => {
+  for (const host of ["127.0.0.1:3100", "localhost:3100", "[::1]:3100"]) {
+    const response = await session(
+      new NextRequest("http://localhost:3100/api/session", {
+        method: "POST",
+        headers: { host, origin: `http://${host}` },
+      }),
+    );
+    assert.equal(response.status, 200);
+  }
+  for (const origin of [
+    "http://localhost:3100",
+    "http://127.0.0.1:3101",
+    "https://127.0.0.1:3100",
+    "null",
+  ]) {
+    const response = await session(
+      new NextRequest("http://localhost:3100/api/session", {
+        method: "POST",
+        headers: { host: "127.0.0.1:3100", origin },
+      }),
+    );
+    assert.equal(response.status, 403);
+  }
+  const external = await session(
+    new NextRequest("http://localhost:3100/api/session", {
+      method: "POST",
+      headers: {
+        host: "evil.example:3100",
+        origin: "http://evil.example:3100",
+        "x-forwarded-host": "localhost:3100",
+      },
+    }),
+  );
+  assert.equal(external.status, 503);
+  const port = await session(
+    new NextRequest("http://localhost:3100/api/session", {
+      method: "POST",
+      headers: { host: "127.0.0.1:3101", origin: "http://127.0.0.1:3101" },
+    }),
+  );
+  assert.equal(port.status, 403);
 });
