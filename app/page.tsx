@@ -556,8 +556,8 @@ export default function Studio() {
                 </label>
                 <p className="small">
                   Camera access starts only when you choose it. Processing
-                  happens on this local server. No photos are sent to an AI
-                  provider.
+                  happens on the server running this studio. No photos are sent
+                  to an AI provider.
                 </p>
                 <div className="button-row">
                   <label
@@ -760,18 +760,18 @@ export default function Studio() {
             </p>
             <p>
               Exact uploaded originals (including their metadata), a clean
-              preview, and the prepared image are saved in private local storage
-              until the session expires, at most 24 hours. Reloading or
+              preview, and the prepared image are saved in private server
+              storage until the session expires, at most 24 hours. Reloading or
               restarting the server restores your controls while the same
               browser session cookie remains. Expired files are removed while
               the server runs or at its next storage access. Keep downloads for
               anything you want to retain longer.
             </p>
             <p>
-              Hosted processing, permanent hosting and encrypted backups are
-              currently unavailable. This studio is local-only; gallery links
-              work only while this server is running and reachable on your own
-              device.
+              Gallery links work while this server is running and reachable. In
+              local mode, they open on this device. A hosted studio can share
+              them with others. Permanent storage and encrypted backups are not
+              provided by this app.
             </p>
           </div>
         </section>

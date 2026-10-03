@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AppError, MAX_UPLOAD_BYTES, checkCancelled } from "./contracts";
 import { state } from "./service";
+import { hostedOrigin } from "./deployment";
 export const privateHeaders = {
   "Cache-Control": "no-store, max-age=0",
   "X-Content-Type-Options": "nosniff",
@@ -10,6 +11,17 @@ export const privateHeaders = {
 function transportOrigin(request: Request) {
   const url = new URL(request.url);
   const host = request.headers.get("host") ?? url.host;
+  const hosted = hostedOrigin();
+  if (hosted) {
+    // TLS may terminate at the reverse proxy, so the internal URL can be HTTP.
+    // The proxy must preserve the public Host and reject other hostnames.
+    if (
+      host.toLowerCase() !== hosted.host ||
+      !["http:", "https:"].includes(url.protocol)
+    )
+      throw new AppError(403, "invalid", "Use the configured studio hostname.");
+    return hosted.origin;
+  }
   if (
     !["http:", "https:"].includes(url.protocol) ||
     !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
@@ -30,7 +42,7 @@ function transportOrigin(request: Request) {
     );
   return transport.origin;
 }
-export function localOnly(request: Request) {
+export function allowedHost(request: Request) {
   transportOrigin(request);
 }
 export function mutation(request: Request) {
@@ -40,7 +52,7 @@ export function mutation(request: Request) {
     throw new AppError(403, "invalid", "Use the studio on the same origin.");
 }
 export async function owner(request: NextRequest) {
-  localOnly(request);
+  allowedHost(request);
   return await state.sessions.require(
     request.cookies.get("commonlight_session")?.value,
   );

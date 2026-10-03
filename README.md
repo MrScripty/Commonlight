@@ -1,6 +1,6 @@
 # Commonlight
 
-**Working name · private-source local prototype for BC + AI member portraits.**
+**Working name · private-source portrait studio for BC + AI members.**
 
 A shared frame and restrained colour grade, with the actual person preserved.
 Built with Next.js, React, TypeScript and Sharp. No image model, inference account,
@@ -18,9 +18,27 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. Development and production launchers bind only to
-127.0.0.1; API routes reject non-loopback origins. This is intentionally **not a
-production deployment**. Start production locally with `npm run build && npm start`.
+Open **http://localhost:3000** on the same computer. Keep the terminal running;
+press Ctrl+C to stop. Changes to the UI refresh automatically. No hosting account
+or environment file is needed. If port 3000 is busy, run `npm run dev -- --port 3001`
+and open http://localhost:3001 instead.
+
+To take a camera photo: select the permission checkbox, choose **Use camera**,
+allow camera access in your browser, then capture and prepare the portrait. You
+can also upload a photo. Camera capture works on localhost or an HTTPS hosted
+site. To take a picture of the UI, use your operating system's screenshot tool
+while the page is open; there is no need to deploy first.
+
+To preview a production build locally:
+
+```sh
+npm run build
+npm start
+```
+
+Both local launchers bind to 127.0.0.1. Without `COMMONLIGHT_ORIGIN`, API routes
+accept only loopback hosts and same-origin writes. For hosting, see the
+[deployment instructions](docs/hosting.md).
 
 ## Try the workflow
 
@@ -56,7 +74,7 @@ default (or an operator-selected `COMMONLIGHT_DATA_DIR` outside all served/build
 root is owner-only and files are 0600; do not put this directory in a static file
 server, shared drive or source control. Storage is not encrypted by this app. Filesystem behavior is qualified on the
 Linux runner; macOS and Windows persistence are not yet qualified.
-Only a single local server is supported, with at most 12 portraits and two
+Only a single server instance is supported, with at most 12 portraits and two
 upload/processing operations. Admission precedes request-body reads.
 
 Every portrait expires no later than its owning session (24 hours from session
@@ -76,7 +94,8 @@ cookie. Public links use distinct random capabilities and cannot access original
 or administration. No permanent credentials or service accounts are created.
 Sharing is an explicit second action; unguessability is not a substitute for
 subject consent. Revocation cannot erase copies viewers have already downloaded.
-Gallery links are local and useful only on the same reachable local server.
+Gallery links use the studio’s origin: localhost during local testing, or the
+configured HTTPS domain when hosted. Viewers must be able to reach that server.
 
 Reloading restores saved portraits and their review/revoke/delete controls through
 an authenticated private listing. Retain the same browser cookie: clearing it or
@@ -92,16 +111,18 @@ removes staged files. No processing publishes a public link automatically.
 - `lib/store.ts`: storage/session contracts and in-memory unit-test adapter.
 - `lib/local-store.ts`: versioned private files, atomic updates, expiry and locks.
 - `lib/service.ts`: processing admission, cancellation fence, creation/publication.
-- `lib/http.ts` and `app/api`: loopback/origin enforcement, auth and bounded bodies.
+- `lib/deployment.ts`, `lib/http.ts` and `app/api`: explicit hosted origin or loopback enforcement, auth and bounded bodies.
 - `lib/camera.ts`: camera permission/stream ownership and cleanup.
 - `app/page.tsx`: capture, review and separate publication user experience.
 
 A hosted processor can implement `PortraitProcessor`; a private object store plus
 transactional metadata store can implement `PortraitStore`. Remote adapters are not configured.
-Before deployment: supply authorized identity/storage, review provider consent and
-retention, add durable cancellation/job reconciliation, rate limits and deployment
-resource boundaries, and run real-browser acceptance. Do not run this local prototype through multiple workers/serverless instances or remove loopback guards
-without revisiting the threat model.
+The included container supports a single hosted Node server with persistent
+private disk and an explicitly configured HTTPS origin. See [hosting](docs/hosting.md)
+for commands and reverse-proxy requirements. Capacity remains intentionally small;
+public rollout needs operator rate limits, provider/retention review and hosted
+browser acceptance. Multiple workers or serverless instances require a shared
+storage/admission design first.
 
 ## Verify
 

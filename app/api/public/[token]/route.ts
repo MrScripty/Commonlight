@@ -1,4 +1,4 @@
-import { failure, jpeg, localOnly } from "@/lib/http";
+import { failure, jpeg, allowedHost } from "@/lib/http";
 import { state } from "@/lib/service";
 export const runtime = "nodejs";
 export async function GET(
@@ -6,7 +6,7 @@ export async function GET(
   context: { params: Promise<{ token: string }> },
 ) {
   try {
-    localOnly(request);
+    allowedHost(request);
     const { token } = await context.params;
     return jpeg((await state.service.store.published(token)).processed);
   } catch (e) {

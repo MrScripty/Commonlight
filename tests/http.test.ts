@@ -202,6 +202,62 @@ test("HTTP rejects cross-origin writes and remote deployment hosts", async () =>
     503,
   );
 });
+test("explicit hosted origin supports TLS termination and rejects foreign hosts and writes", async () => {
+  const previous = process.env.COMMONLIGHT_ORIGIN;
+  process.env.COMMONLIGHT_ORIGIN = "https://portraits.example.com";
+  const hostedRequest = (headers: Record<string, string> = {}) =>
+    new NextRequest("http://localhost:3000/api/session", {
+      method: "POST",
+      headers: {
+        host: "portraits.example.com",
+        origin: "https://portraits.example.com",
+        ...headers,
+      },
+    });
+  try {
+    const response = await session(hostedRequest());
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("set-cookie") ?? "", /; Secure/i);
+    assert.equal(
+      (await session(hostedRequest({ origin: "https://evil.example" }))).status,
+      403,
+    );
+    assert.equal(
+      (await session(hostedRequest({ origin: "http://portraits.example.com" })))
+        .status,
+      403,
+    );
+    assert.equal(
+      (
+        await session(
+          hostedRequest({
+            host: "evil.example",
+            "x-forwarded-host": "portraits.example.com",
+          }),
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (await session(hostedRequest({ host: "localhost:3000" }))).status,
+      403,
+    );
+    for (const invalid of [
+      "http://portraits.example.com",
+      "https://portraits.example.com/path",
+      "https://user:password@portraits.example.com",
+      "https://portraits.example.com?x=1",
+      "https://portraits.example.com#fragment",
+      "not-a-url",
+    ]) {
+      process.env.COMMONLIGHT_ORIGIN = invalid;
+      assert.equal((await session(hostedRequest())).status, 503);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.COMMONLIGHT_ORIGIN;
+    else process.env.COMMONLIGHT_ORIGIN = previous;
+  }
+});
 test("streaming body bounds apply even without Content-Length", async () => {
   const input = new Request(origin, {
     method: "POST",

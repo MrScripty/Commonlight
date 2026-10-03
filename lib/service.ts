@@ -34,7 +34,7 @@ export class PortraitService {
       throw new AppError(
         503,
         "unavailable",
-        "The local studio is busy. Try again shortly.",
+        "The studio is busy. Try again shortly.",
       );
     if (owner.expiresAt <= this.now())
       throw new AppError(
@@ -45,7 +45,7 @@ export class PortraitService {
     this.active++;
     try {
       if ((await this.store.count()) + this.active > MAX_RECORDS)
-        throw new AppError(503, "unavailable", "The local studio is full.");
+        throw new AppError(503, "unavailable", "The studio is full.");
       const bytes = typeof input === "function" ? await input() : input;
       checkCancelled(signal);
       const images = await this.processor.process(bytes, options, signal);
