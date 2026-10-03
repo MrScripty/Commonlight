@@ -1,9 +1,9 @@
 # Durable local studio
 
-Status: Verifying. Operation: verify. Current phase: narrow repair re-review.
-Acceptance: repaired lint/types/31 tests pass; exact repaired build and hosted browser evidence pending. Next slice: independently review and publish the persistence milestone for hosted qualification.
+Status: Verifying. Operation: verify. Current phase: final source/integration review.
+Acceptance: reviewed persistence repairs and all hosted gates pass; final source/integration review remains. Next slice: review the origin follow-up and qualification evidence before integration.
 Base: merged main commit 51f1ef9b3e404ad588606d6a9e270c47eea8481e, including baseline review fixes eb306d5.
-Publication: new development branch/PR targeting main; baseline PR1 is already merged.
+Publication: new development branch/PR targeting main; baseline PR 1 is already merged.
 
 ## Objective and exact write set
 
@@ -44,7 +44,7 @@ provider account or permanent credential.
 1. Persistence/recovery (Verifying): unit/actual-adapter reopen, atomic mutation,
    corruption, expiry, ownership and route tests; strict/lint/build checks;
    independent review before dependent PR publication.
-2. Browser evidence (Verifying): hosted Playwright baseline/upload/reload/revoke/
+2. Browser evidence (Accepted): hosted Playwright baseline/upload/reload/revoke/
    delete, camera close/capture, repeated/interrupted actions and keyboard flows.
    Uploaded synthetic test artifacts only; no production deployment.
 
@@ -61,3 +61,10 @@ One heavy build at a time; parent coordinates shared RAM/disk. Local browser acc
 is denied, so hosted evidence is required. Replan for multi-worker serving,
 longer-lived authority, remote hosting, disk encryption or provider integration.
 See execution-ledger.md and issues.md.
+
+## Qualified evidence
+
+Exact application head d0c4befe passed hosted run 37081743869, including 32 tests,
+production build/audit and all three Chromium scenarios. See
+[hosted qualification](reports/hosted-qualification.md). The earlier checkpoint
+reports retain their historical pending status; this section owns current gates.

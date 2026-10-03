@@ -1,7 +1,7 @@
 # Execution ledger
 
 2026-10-02: Parent authorized dependent persistence/recovery slice and hosted
-browser acceptance. Baseline PR1/head27d6655 remains unchanged. Local browser is
+browser acceptance. Baseline PR 1/head27d6655 remains unchanged. Local browser is
 not used; tests will run in authorized hosted CI. Current disk headroom 4.3 GB.
 
 2026-10-02 23:35 UTC: Implemented versioned private local persistence, authenticated
@@ -17,7 +17,7 @@ its CI37077744402 passed and its pinned actions/telemetry correction are inherit
 Production audit found zero vulnerabilities. Playwright enumerates three Chromium
 scenarios but execution remains pending hosted CI, not replaced by unit evidence.
 Cancellation now owns private staging cleanup; Back/Forward restoration reconciles
-session-owned state. The root merged baseline PR1 at51f1ef9; this new milestone
+session-owned state. The root merged baseline PR 1 at51f1ef9; this new milestone
 will target main without rewriting earlier history. Ready for independent review.
 
 2026-10-02 23:59 UTC: Independent review found static/build-output containment,
@@ -27,10 +27,16 @@ all three and added source/real-filesystem fault regressions. Lint, types and
 is deferred while the foreground mobile work owns resource priority; hosted
 browser execution remains pending. Ready for narrow independent re-review.
 
-2026-10-03 00:19 UTC: Published reviewed milestone575eed7 as draft PR2. Hosted
-run37081179610 passed the exact production build,31tests, audit and Chromium setup,
+2026-10-03 00:19 UTC: Published reviewed milestone575eed7 as draft PR 2. Hosted
+run 37081179610 passed the exact production build,31tests, audit and Chromium setup,
 then all browser scenarios exposed same-origin403 at session creation. The trace
 shows Origin/Host127.0.0.1:3100; NextURL source canonicalizes its URL to localhost.
 Corrected validation to preserve actual loopback Host/Origin equality while rejecting
 cross-host, scheme, port and forwarded-header substitutions. Added focused route
 regression; browser scenarios are unchanged and must pass the next hosted run.
+
+2026-10-03 00:26 UTC: Exact head d0c4befe passed hosted run 37081743869: 32 tests,
+production build, clean audit and all three Chromium scenarios. Inspected the
+synthetic mobile screenshot; hosted evidence establishes the selected browser
+flows, not full accessibility/cross-browser coverage. See hosted-qualification.md.
+Final source/integration review remains explicit; no merge or deployment performed.
